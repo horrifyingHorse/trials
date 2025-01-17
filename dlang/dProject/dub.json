@@ -1,0 +1,9 @@
+{
+	"authors": [
+		"asbestos"
+	],
+	"copyright": "Copyright © 2025, asbestos",
+	"description": "A minimal D application.",
+	"license": "MIT",
+	"name": "dproject"
+}
