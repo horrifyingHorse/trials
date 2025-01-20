@@ -1,42 +1,35 @@
 import std.stdio;
-import std.algorithm;
+
+import utils.matrix;
 
 void main()
 {
-	string s = "diz crazy dude";
-	writeln("sick world ", s);
+	auto m = new Matrix2D!int(2, 2);
+	m = [[4, 5], [1, 2]];
+	m.display();
+	writeln(m.determinant());
+	m[1, 1] = 9;
+	m.display();
+	m[0] = [420, 69];
+	m.display();
 
-	writeln("Creating dynamic arrays!");
-	char[] c;
-	c ~= "a";
-	writeln(c);
-	c ~= "y";
-	writeln(c);
-	c ~= "a";
-	writeln(c);
-	c ~= "a";
-	writeln(c);
-	c ~= "n";
-	writeln(c);
+	writeln("Now time for a 3x3");
+	m = new Matrix2D!int(3, 3);
+	m = [[1, -2, 3], [2, 0, 3], [1, 5, 4]];
+	m.display();
+	writeln(m.determinant());
 
-	int[] i = [1, 4, 3, 2];
-	i.sort();
-	writeln(i.map!(item => item * 2));
+	writeln("Now for 4x4");
+	auto n = new Matrix2D!int(4, 4);
+	n = [
+		[4, 3, 2, 2],
+		[0, 1, -3, 3],
+		[0, -1, 3, 3],
+		[0, 3, 1, 1]
+	];
+	n.display();
+	writeln(m.determinant());
+	n.transpose().display();
 
-	writeln("Enter a string: ");
-	s = readln();
-	writeln(s[1 .. 3], ": This text has been sliced XD");
-
-	auto conc = (string a, string b) => a ~ b;
-
-	auto concAndRule = (string a, string b) {
-		writeln("well, no => is req");
-		writeln("Apparently it all works fine here");
-		return a ~ b;
-	};
-
-	string a = "Sick, ";
-	string b = "World!";
-	writeln(conc(a, b));
-	writeln(concAndRule(a, b));
+	writeln(m == n);
 }
