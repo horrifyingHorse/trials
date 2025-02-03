@@ -6,7 +6,7 @@ project(
   VERSION 0.6.9)
 
 set(CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/raylib/")
-include_directories(raylib/include)
+include_directories(raylib/include include/)
 link_directories(raylib/)
 
 file(GLOB SOURCES src/*.cpp)
