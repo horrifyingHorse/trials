@@ -126,10 +126,14 @@ public:
   void debug() {
     std::string txt =
         "Obstacles Vector size: " + std::to_string(obstacles.size());
+    std::string spd = "speedX: " + std::to_string(speedX);
     DrawText(txt.c_str(), 200, 200, 20, FGCOLOR);
+    DrawText(spd.c_str(), 200, 224, 20, FGCOLOR);
   }
 
   void pauseFrame() { pause = true; }
+
+  void incrementSpeed() { speedX += 0.3; }
 
   void reset() {
     obstacles.clear();
@@ -153,7 +157,7 @@ protected:
 
   float width = 140;
   int space = 300;
-  int speedX = 3;
+  float speedX = 3;
 
   int lastObstacle = 9999;
   bool firstOutOfView = false;
@@ -195,6 +199,7 @@ int main() {
   bool isPressed = false;
   unsigned long long score = 0;
   bool passing = false;
+  bool speedIncremented = true;
   while (!WindowShouldClose()) {
     if (ggwp && IsKeyDown(KEY_ENTER)) {
       b.reset();
@@ -232,6 +237,12 @@ int main() {
     }
     if (wasPassing && !passing) {
       score++;
+      speedIncremented = false;
+    }
+
+    if (score != 0 && !(score % 10) && !speedIncremented) {
+      view.incrementSpeed();
+      speedIncremented = true;
     }
 
     b.gravity();
