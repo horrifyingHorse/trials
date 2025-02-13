@@ -2,8 +2,8 @@
 //
 // .env -> must contain GEMINI_KEY
 #include <curl/curl.h>
-#include <curl/easy.h>
-#include <curl/multi.h>
+#include <fcntl.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <atomic>
 #include <chrono>
@@ -40,12 +40,13 @@ class GeminiResponseParser {
   string str() {
     stringstream format;
 
-    format << "{ \"contents\": [";
+    format << "{ \"contents\": [\n";
     int index = 0;
     for (auto& chat : history) {
-      format << chat;
+      format << "\t" << chat;
       if (index++ != history.size() - 1)
         format << ",";
+      format << "\n";
     }
 
     format << "] }";
@@ -178,6 +179,35 @@ void initCurl(ENV& env, CURL* curl, struct curl_slist* headers) {
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
 }
 
+void clean(string& str) {
+  str.erase(str.find_last_not_of(' ') + 1);
+  str.erase(0, str.find_first_not_of(' '));
+}
+
+void peek_history(GeminiResponseParser& gemini) {
+  fstream f("gemini_history.txt", ios::out);
+  f << gemini.str();
+  f.close();
+
+  int fd = open("ge_run_history.sh", O_WRONLY | O_CREAT, 0777);
+
+  string s;
+  stringstream ss;
+  ss << "#!bin/bash" << endl;
+  ss << endl;
+  ss << "less gemini_history.txt" << endl;
+  ss << "rm -rf gemini_history.txt" << endl;
+  ss << "rm -rf ge_run_history.sh";
+  s = ss.str();
+  write(fd, s.c_str(), s.length());
+  close(fd);
+
+  if (fork() == 0) {
+    execl("/bin/bash", "bash", "ge_run_history.sh", NULL);
+  }
+  wait(NULL);
+}
+
 int main() {
   CURL* curl;
   CURLcode res;
@@ -201,11 +231,17 @@ int main() {
     cout << "\033[0m";
     cout << "\033[90m\n \033[1m>\033[0m \033[90m";
     getline(cin, prompt);
+    clean(prompt);
 
     if (prompt.empty())
       continue;
     if (prompt == "/clear") {
       cout << "\033[2J\033[H";
+      continue;
+    }
+    if (prompt == "/history" || prompt == "/hist") {
+      cout << "\033[0m" << flush;
+      peek_history(gemini);
       continue;
     }
 
@@ -222,7 +258,10 @@ int main() {
     wait.join();
 
     cout << "\033[0m\033[1m\033[38;2;186;187;241m";
-    cout << gemini.parseResponse((string_view)readBuffer) << endl << endl;
+    string parsedResponse =
+        (string)gemini.parseResponse((string_view)readBuffer);
+    gemini.push(Gemini::AI, parsedResponse);
+    cout << parsedResponse << endl << endl;
   }
   curl_easy_cleanup(curl);
 }
