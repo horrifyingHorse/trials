@@ -1,5 +1,6 @@
 *.[ao]
 *.out
+**.env
 
 interesting.md
 **/build/
