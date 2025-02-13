@@ -115,6 +115,7 @@ void waiting() {
   };
   // clang-format on
 
+  cout << "\033[0m" << flush;
   int i = 0;
   while (displayWait) {
     stringstream bffr;
@@ -151,11 +152,11 @@ void waiting() {
       bffr << "\n";
     }
 
-    cout << "\033[92m\r" << bffr.str() << flush;
+    cout << "\033[38;2;186;187;241m\r" << bffr.str() << flush;
     this_thread::sleep_for(chrono::milliseconds(100));
     cout << "\033[1A\033[2K\r\033[1A\033[2K\r\033[1A\033[2K\r" << flush;
   }
-  cout << "\n\033[0m";
+  cout << "\n\033[0m" << flush;
 }
 
 void initCurl(ENV& env, CURL* curl, struct curl_slist* headers) {
@@ -196,12 +197,17 @@ int main() {
   while (1) {
     string prompt = "";
     string readBuffer;
-    cin.clear();
+
+    cout << "\033[0m";
     cout << "\033[90m\n \033[1m>\033[0m \033[90m";
     getline(cin, prompt);
 
     if (prompt.empty())
       continue;
+    if (prompt == "/clear") {
+      cout << "\033[2J\033[H";
+      continue;
+    }
 
     gemini.push(Gemini::USER, prompt);
 
@@ -215,10 +221,8 @@ int main() {
     displayWait = false;
     wait.join();
 
-    // cout << "\033[2K\r";
-
-    cout << "\033[0m";
-    cout << gemini.parseResponse((string_view)readBuffer) << endl;
+    cout << "\033[0m\033[1m\033[38;2;186;187;241m";
+    cout << gemini.parseResponse((string_view)readBuffer) << endl << endl;
   }
   curl_easy_cleanup(curl);
 }
