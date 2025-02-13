@@ -21,6 +21,22 @@
 
 using namespace std;
 
+namespace ANSI {
+const string DEFAULT = "\033[0m";
+const string CURSOR_BEGIN = "\r";
+const string BOLD = "\033[1m";
+
+const string GRAY_FG = "\033[90m";
+const string RED_FG = "\033[31m";
+const string BABBF1 = "\033[38;2;186;187;241m";
+
+const string MOVE1UP = "\033[1A";
+const string MOVETOP = "\033[H";
+
+const string CLEAR_SCREEN = "\033[2J";
+const string CLEAR_LINE = "\033[2K\r";
+}  // namespace ANSI
+
 enum Gemini { USER, AI };
 
 class GeminiResponseParser {
@@ -75,8 +91,8 @@ class GeminiResponseParser {
 void load_env(ENV& env) {
   fstream f(".env");
   if (!f) {
-    cerr << "\033[31mError loading environ variables from file '.env'\033[0m"
-         << endl;
+    cerr << ANSI::RED_FG << "Error loading environ variables from file '.env'"
+         << ANSI::DEFAULT << endl;
     exit(1);
   }
   string env_key;
@@ -153,11 +169,12 @@ void waiting() {
       bffr << "\n";
     }
 
-    cout << "\033[38;2;186;187;241m\r" << bffr.str() << flush;
+    cout << ANSI::BABBF1 << ANSI::CURSOR_BEGIN << bffr.str() << flush;
     this_thread::sleep_for(chrono::milliseconds(100));
-    cout << "\033[1A\033[2K\r\033[1A\033[2K\r\033[1A\033[2K\r" << flush;
+    cout << ANSI::MOVE1UP << ANSI::CLEAR_LINE << ANSI::MOVE1UP
+         << ANSI::CLEAR_LINE << ANSI::MOVE1UP << ANSI::CLEAR_LINE << flush;
   }
-  cout << "\n\033[0m" << flush;
+  cout << "\n" << ANSI::DEFAULT << flush;
 }
 
 void initCurl(ENV& env, CURL* curl, struct curl_slist* headers) {
@@ -228,19 +245,20 @@ int main() {
     string prompt = "";
     string readBuffer;
 
-    cout << "\033[0m";
-    cout << "\033[90m\n \033[1m>\033[0m \033[90m";
+    cout << ANSI::DEFAULT;
+    cout << ANSI::GRAY_FG << ANSI::BOLD << "\n > " << ANSI::DEFAULT
+         << ANSI::GRAY_FG;
     getline(cin, prompt);
     clean(prompt);
 
     if (prompt.empty())
       continue;
     if (prompt == "/clear") {
-      cout << "\033[2J\033[H";
+      cout << ANSI::CLEAR_SCREEN << ANSI::MOVETOP << flush;
       continue;
     }
     if (prompt == "/history" || prompt == "/hist") {
-      cout << "\033[0m" << flush;
+      cout << ANSI::DEFAULT << flush;
       peek_history(gemini);
       continue;
     }
@@ -257,7 +275,7 @@ int main() {
     displayWait = false;
     wait.join();
 
-    cout << "\033[0m\033[1m\033[38;2;186;187;241m";
+    cout << ANSI::DEFAULT << ANSI::GRAY_FG << ANSI::BABBF1 << ANSI::BOLD;
     string parsedResponse =
         (string)gemini.parseResponse((string_view)readBuffer);
     gemini.push(Gemini::AI, parsedResponse);
