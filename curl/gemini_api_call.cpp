@@ -12,10 +12,13 @@
 #include <ostream>
 #include <sstream>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <vector>
+
+#include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 
 #define ENV unordered_map<string, string>
 
@@ -45,9 +48,14 @@ class GeminiResponseParser {
 
   void push(enum Gemini user, string& prompt) {
     stringstream prompt_stream;
+    string quomarks = "\"";
     string role = (user == Gemini::AI) ? "model" : "user";
+    if (user == Gemini::AI) {
+      quomarks = "";
+    }
 
-    prompt_stream << "{ \"parts\":[{\"text\": \"" << prompt << "\"}]";
+    prompt_stream << "{ \"parts\":[{\"text\": " << quomarks << prompt
+                  << quomarks << "}]";
     prompt_stream << ", \"role\": \"" << role << "\" }";
 
     this->history.push_back(prompt_stream.str());
@@ -70,18 +78,23 @@ class GeminiResponseParser {
     return format.str();
   }
 
-  string_view parseResponse(string_view sv) {
-    int text_loc = sv.find("\"text\":");
-    if (text_loc == string::npos)
+  string parseResponse(string& sv) {
+    string s = (string)sv;
+    rapidjson::Document d;
+    d.Parse(s.c_str());
+    if (!d.HasMember("candidates")) {
       return sv;
-    sv.remove_prefix(text_loc + 9);
+    }
 
-    text_loc = sv.find("\"role\": \"model\"");
-    if (text_loc == string::npos)
-      return sv;
-    sv.remove_suffix(sv.length() - text_loc + 35);
+    rapidjson::Value& candidates =
+        d["candidates"][0]["content"]["parts"][0]["text"];
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
 
-    return sv;
+    d["candidates"][0]["content"]["parts"][0]["text"].Accept(writer);
+
+    sv = candidates.GetString();
+    return buffer.GetString();
   }
 
  private:
@@ -151,9 +164,6 @@ void waiting() {
      * ╞ ╩╦╝╔╝╔ ╡
      * ╘ ═╩═╩═╩ ╛
      *
-     * ╒╦═╦═╦═╦═╦═╦═╦═╦═╦═╦═╦═╕
-     * ╞╩╦╝╔∙l o a d i n╝╔╩╦╝╔╡
-     * ╘═╩═╩═╩═╩═╩═╩═╩═╩═╩═╩═╩╛
      */
 
     for (int line = 0; line < 3; line++) {
@@ -276,10 +286,9 @@ int main() {
     wait.join();
 
     cout << ANSI::DEFAULT << ANSI::GRAY_FG << ANSI::BABBF1 << ANSI::BOLD;
-    string parsedResponse =
-        (string)gemini.parseResponse((string_view)readBuffer);
-    gemini.push(Gemini::AI, parsedResponse);
-    cout << parsedResponse << endl << endl;
+    string serializedResponse = (string)gemini.parseResponse(readBuffer);
+    gemini.push(Gemini::AI, serializedResponse);
+    cout << readBuffer << endl;
   }
   curl_easy_cleanup(curl);
 }
