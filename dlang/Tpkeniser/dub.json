@@ -1,0 +1,9 @@
+{
+	"authors": [
+		"asbestos"
+	],
+	"copyright": "Copyright © 2025, asbestos",
+	"description": "Minimal tokeniser in da dlang",
+	"license": "MIT",
+	"name": "tpkeniser"
+}

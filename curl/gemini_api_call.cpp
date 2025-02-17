@@ -1,6 +1,3 @@
-// curl is pretty straightforward, until the C kicks in
-//
-// .env -> must contain GEMINI_KEY
 #include <curl/curl.h>
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -44,62 +41,156 @@ enum Gemini { USER, AI };
 
 class GeminiResponseParser {
  public:
-  GeminiResponseParser() {}
-
-  void push(enum Gemini user, string& prompt) {
-    stringstream prompt_stream;
-    string quomarks = "\"";
-    string role = (user == Gemini::AI) ? "model" : "user";
-    if (user == Gemini::AI) {
-      quomarks = "";
-    }
-
-    prompt_stream << "{ \"parts\":[{\"text\": " << quomarks << prompt
-                  << quomarks << "}]";
-    prompt_stream << ", \"role\": \"" << role << "\" }";
-
-    this->history.push_back(prompt_stream.str());
-  }
-
-  string str() {
-    stringstream format;
-
-    format << "{ \"contents\": [\n";
-    int index = 0;
-    for (auto& chat : history) {
-      format << "\t" << chat;
-      if (index++ != history.size() - 1)
-        format << ",";
-      format << "\n";
-    }
-
-    format << "] }";
-
-    return format.str();
-  }
-
-  string parseResponse(string& sv) {
-    string s = (string)sv;
-    rapidjson::Document d;
-    d.Parse(s.c_str());
-    if (!d.HasMember("candidates")) {
-      return sv;
-    }
-
-    rapidjson::Value& candidates =
-        d["candidates"][0]["content"]["parts"][0]["text"];
-    rapidjson::StringBuffer buffer;
-    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-
-    d["candidates"][0]["content"]["parts"][0]["text"].Accept(writer);
-
-    sv = candidates.GetString();
-    return buffer.GetString();
-  }
+  GeminiResponseParser();
+  void push(enum Gemini user, string& prompt);
+  string str();
+  string parseResponse(string& sv);
 
  private:
   vector<string> history;
+  rapidjson::Document d;
 };
+
+void load_env(ENV&);
+// Callback function to handle the received Chunk from server
+// contents -> rec data
+// size     -> size of one chunk
+// nmemb    -> num of chunks
+// userp    -> the pointer to user defined data: readBuffer
+//
+// return   -> number of bytes processed
+static size_t WriteCallback(void* contents,
+                            size_t size,
+                            size_t nmemb,
+                            void* userp);
+void waiting();
+void initCurl(ENV&, CURL*, struct curl_slist*);
+void clean(string&);
+void peek_history(GeminiResponseParser&);
+
+atomic<bool> displayWait = true;
+
+int main() {
+  CURL* curl;
+  CURLcode res;
+  ENV env;
+  GeminiResponseParser gemini;
+  struct curl_slist* headers = nullptr;
+  headers = curl_slist_append(headers, "Content-Type: application/json");
+
+  load_env(env);
+  curl = curl_easy_init();
+  if (!curl) {
+    cerr << "Curly error";
+    exit(1);
+  }
+  initCurl(env, curl, headers);
+
+  while (1) {
+    string prompt = "";
+    string readBuffer;
+
+    cout << ANSI::DEFAULT;
+    cout << ANSI::GRAY_FG << ANSI::BOLD << "\n > " << ANSI::DEFAULT
+         << ANSI::GRAY_FG;
+    getline(cin, prompt);
+    clean(prompt);
+
+    if (prompt.empty())
+      continue;
+    if (prompt == "/clear") {
+      cout << ANSI::CLEAR_SCREEN << ANSI::MOVETOP << flush;
+      continue;
+    }
+    if (prompt == "/history" || prompt == "/hist") {
+      cout << ANSI::DEFAULT << flush;
+      peek_history(gemini);
+      continue;
+    }
+    if (prompt == "/exit" || prompt == "/q") {
+      cout << ANSI::DEFAULT << flush;
+      return 0;
+    }
+
+    gemini.push(Gemini::USER, prompt);
+
+    string history = gemini.str();
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, history.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+
+    displayWait = true;
+    thread wait(waiting);
+    res = curl_easy_perform(curl);
+    string serializedResponse = (string)gemini.parseResponse(readBuffer);
+    gemini.push(Gemini::AI, serializedResponse);
+    displayWait = false;
+    wait.join();
+
+    cout << ANSI::DEFAULT << ANSI::BABBF1 << ANSI::BOLD;
+    cout << readBuffer << endl;
+  }
+  curl_easy_cleanup(curl);
+}
+
+GeminiResponseParser::GeminiResponseParser() {}
+
+void GeminiResponseParser::push(enum Gemini user, string& prompt) {
+  string role = (user == Gemini::AI) ? "model" : "user";
+  stringstream prompt_ss = (stringstream)prompt;
+
+  d.SetObject();
+  auto& allocator = d.GetAllocator();
+  rapidjson::StringBuffer buffer;
+  rapidjson::Value text_obj(rapidjson::kObjectType);
+  rapidjson::Value text_arr_wrapper(rapidjson::kArrayType);
+  rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+  rapidjson::Value role_Value = rapidjson::Value(role.c_str(), allocator);
+  rapidjson::Value prompt_Value = rapidjson::Value(prompt.c_str(), allocator);
+
+  text_obj.AddMember("text", prompt_Value, allocator);
+  text_arr_wrapper.PushBack(text_obj, allocator);
+  d.AddMember("parts", std::move(text_arr_wrapper), allocator);
+  d.AddMember("role", role_Value, allocator);
+
+  d.Accept(writer);
+
+  this->history.push_back(buffer.GetString());
+}
+
+string GeminiResponseParser::str() {
+  stringstream format;
+
+  format << "{ \"contents\": [\n";
+  int index = 0;
+  for (auto& chat : history) {
+    format << "\t" << chat;
+    if (index++ != history.size() - 1)
+      format << ",";
+    format << "\n";
+  }
+
+  format << "] }";
+
+  return format.str();
+}
+
+string GeminiResponseParser::parseResponse(string& sv) {
+  string s = (string)sv;
+  d.Parse(s.c_str());
+  if (!d.HasMember("candidates")) {
+    return sv;
+  }
+
+  rapidjson::Value& candidates =
+      d["candidates"][0]["content"]["parts"][0]["text"];
+  rapidjson::StringBuffer buffer;
+  rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+
+  d["candidates"][0]["content"]["parts"][0]["text"].Accept(writer);
+
+  sv = candidates.GetString();
+  return sv;
+}
 
 void load_env(ENV& env) {
   fstream f(".env");
@@ -119,13 +210,6 @@ void load_env(ENV& env) {
   f.close();
 }
 
-// Callback function to handle the received Chunk from server
-// contents -> rec data
-// size     -> size of one chunk
-// nmemb    -> num of chunks
-// userp    -> the pointer to user defined data: readBuffer
-//
-// return   -> number of bytes processed
 static size_t WriteCallback(void* contents,
                             size_t size,
                             size_t nmemb,
@@ -133,8 +217,6 @@ static size_t WriteCallback(void* contents,
   ((string*)userp)->append((char*)contents, size * nmemb);
   return size * nmemb;
 }
-
-atomic<bool> displayWait = true;
 
 void waiting() {
   // clang-format off
@@ -192,14 +274,13 @@ void initCurl(ENV& env, CURL* curl, struct curl_slist* headers) {
     cerr << "please provide a GEMINI_KEY to proceed" << endl;
     exit(1);
   }
-  cout << env["LEAKED_API_KEY"] << '\n';
 
   const string GEMINI_URL =
       "https://generativelanguage.googleapis.com/v1beta/models/"
       "gemini-1.5-flash:generateContent?key=" +
       env["LEAKED_API_KEY"];
 
-  cout << GEMINI_URL << "\n";
+  cout << ANSI::BABBF1 << GEMINI_URL << "\n";
   curl_easy_setopt(curl, CURLOPT_POST, 1L);
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
   curl_easy_setopt(curl, CURLOPT_URL, GEMINI_URL.c_str());
@@ -233,62 +314,4 @@ void peek_history(GeminiResponseParser& gemini) {
     execl("/bin/bash", "bash", "ge_run_history.sh", NULL);
   }
   wait(NULL);
-}
-
-int main() {
-  CURL* curl;
-  CURLcode res;
-  ENV env;
-  GeminiResponseParser gemini;
-  struct curl_slist* headers = nullptr;
-  headers = curl_slist_append(headers, "Content-Type: application/json");
-
-  load_env(env);
-  curl = curl_easy_init();
-  if (!curl) {
-    cerr << "Curly error";
-    exit(1);
-  }
-  initCurl(env, curl, headers);
-
-  while (1) {
-    string prompt = "";
-    string readBuffer;
-
-    cout << ANSI::DEFAULT;
-    cout << ANSI::GRAY_FG << ANSI::BOLD << "\n > " << ANSI::DEFAULT
-         << ANSI::GRAY_FG;
-    getline(cin, prompt);
-    clean(prompt);
-
-    if (prompt.empty())
-      continue;
-    if (prompt == "/clear") {
-      cout << ANSI::CLEAR_SCREEN << ANSI::MOVETOP << flush;
-      continue;
-    }
-    if (prompt == "/history" || prompt == "/hist") {
-      cout << ANSI::DEFAULT << flush;
-      peek_history(gemini);
-      continue;
-    }
-
-    gemini.push(Gemini::USER, prompt);
-
-    string history = gemini.str();
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, history.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-
-    displayWait = true;
-    thread wait(waiting);
-    res = curl_easy_perform(curl);
-    displayWait = false;
-    wait.join();
-
-    cout << ANSI::DEFAULT << ANSI::GRAY_FG << ANSI::BABBF1 << ANSI::BOLD;
-    string serializedResponse = (string)gemini.parseResponse(readBuffer);
-    gemini.push(Gemini::AI, serializedResponse);
-    cout << readBuffer << endl;
-  }
-  curl_easy_cleanup(curl);
 }
