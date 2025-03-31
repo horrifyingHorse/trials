@@ -14,11 +14,19 @@
 #include <utility>
 #include <vector>
 
-#define LOG_TICK(ticks) std::cout << ticks;
+#ifndef LOG_LEVEL_SCHEDSIM
+#define LOG_LEVEL_SCHEDSIM 1  // Default log level 1
+#endif
+
+#define LOG_TICK(ticks)        \
+  if (LOG_LEVEL_SCHEDSIM == 1) \
+    std::cout << ticks << LOG_LEVEL_SCHEDSIM;
 #define LOG(tick, device, procData) \
-  std::cout << tick << "\t" << device << "\t\t" << procData << "\n";
+  if (LOG_LEVEL_SCHEDSIM == 1)      \
+    std::cout << tick << "\t" << device << "\t\t" << procData << "\n";
 #define LOG_DEBUG(name, label, info) \
-  std::cout << name << "\n\t\t" << label "\t" << info;
+  if (LOG_LEVEL_SCHEDSIM == 1)       \
+    std::cout << name << "\n\t\t" << label "\t" << info;
 
 typedef struct Process {
   enum State { READY, RUNNING, BLOCKED, TERMINATED };
@@ -171,4 +179,5 @@ class Device {
   void ScheduleProc();
 };
 
+Processes GetProcs();
 #endif  // INCLUDE_INCLUDE_SCHEDULER_H_

@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <fstream>
 
 Process::Process(const std::string& name,
                  size_t at,
@@ -361,4 +362,47 @@ void Device::ExecIO() {
   } else {
     LOG("\t", "IO", execProcIO.procName << ":" << countIOBurst)
   }
+}
+
+Processes GetProcs() {
+#define GetIndex(exec)                           \
+  if (indx != 0) {                               \
+    sv.remove_prefix(indx + 1);                  \
+  }                                              \
+  indx = sv.find_first_of(";");                  \
+  if (indx == std::string::npos) {               \
+    std::cout << "Invalid Format in procs.proc"; \
+    exit(1);                                     \
+  }                                              \
+  exec
+
+  std::fstream procFile("procs.proc");
+  if (!procFile) {
+    std::cout << "Unable to open procs.proc";
+    exit(1);
+  }
+  int indx = 0;
+  Processes procs;
+  std::string line;
+  std::string_view sv;
+  std::string procName;
+  size_t arrivalTime = SIZE_MAX;
+  size_t burstTimeCPU = SIZE_MAX;
+  size_t burstTimeIO = SIZE_MAX;
+  size_t burstTimeRate = SIZE_MAX;
+  size_t burstRemainCPU = SIZE_MAX;
+
+  while (std::getline(procFile, line)) {
+    indx = 0;
+    sv = line;
+    GetIndex(procName = sv.substr(0, indx));
+    GetIndex(arrivalTime = std::stoull((std::string)sv.substr(0, indx)));
+    GetIndex(burstTimeCPU = std::stoull((std::string)sv.substr(0, indx)));
+    GetIndex(burstTimeIO = std::stoull((std::string)sv.substr(0, indx)));
+    sv.remove_prefix(indx + 1);
+    burstTimeRate = std::stoull((std::string)sv);
+    procs.push_back(Process(procName, arrivalTime, burstTimeCPU, burstTimeIO,
+                            burstTimeRate));
+  }
+  return std::move(procs);
 }

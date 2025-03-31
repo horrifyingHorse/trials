@@ -1,11 +1,11 @@
 #include <raylib.h>
 #include <cstddef>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
+
 #include "../include/Scheduler.h"
 
 #define BGCOLOR (Color){23, 23, 23, 255}
@@ -15,51 +15,17 @@
 #define CPUGREEN (Color){129, 178, 154, 255}
 #define IORED (Color){224, 122, 95, 255}
 
+#define HandleKeyPress(key, isPressed, action) \
+  if (IsKeyDown(key) && !isPressed) {          \
+    action;                                    \
+    isPressed = true;                          \
+  }                                            \
+  if (IsKeyUp(key) && isPressed) {             \
+    isPressed = false;                         \
+  }
+
 Processes procs;
 Device d;
-
-Processes GetProcs() {
-#define GetIndex(exec)                           \
-  if (indx != 0) {                               \
-    sv.remove_prefix(indx + 1);                  \
-  }                                              \
-  indx = sv.find_first_of(";");                  \
-  if (indx == std::string::npos) {               \
-    std::cout << "Invalid Format in procs.proc"; \
-    exit(1);                                     \
-  }                                              \
-  exec
-
-  std::fstream procFile("procs.proc");
-  if (!procFile) {
-    std::cout << "Unable to open procs.proc";
-    exit(1);
-  }
-  int indx = 0;
-  Processes procs;
-  std::string line;
-  std::string_view sv;
-  std::string procName;
-  size_t arrivalTime = SIZE_MAX;
-  size_t burstTimeCPU = SIZE_MAX;
-  size_t burstTimeIO = SIZE_MAX;
-  size_t burstTimeRate = SIZE_MAX;
-  size_t burstRemainCPU = SIZE_MAX;
-
-  while (std::getline(procFile, line)) {
-    indx = 0;
-    sv = line;
-    GetIndex(procName = sv.substr(0, indx));
-    GetIndex(arrivalTime = std::stoull((std::string)sv.substr(0, indx)));
-    GetIndex(burstTimeCPU = std::stoull((std::string)sv.substr(0, indx)));
-    GetIndex(burstTimeIO = std::stoull((std::string)sv.substr(0, indx)));
-    sv.remove_prefix(indx + 1);
-    burstTimeRate = std::stoull((std::string)sv);
-    procs.push_back(Process(procName, arrivalTime, burstTimeCPU, burstTimeIO,
-                            burstTimeRate));
-  }
-  return std::move(procs);
-}
 
 void DrawTableBoxes(int x,
                     int y,
@@ -227,6 +193,7 @@ int main(int argc, char* argv[]) {
     charts.push_back(GanttChart(d.getCompletedProcs(), d.getTicks()));
     preports.push_back(d.getPerfReport());
   }
+
   int chartSelection = 0;
   bool isPressedL = false, isPressedH = false;
   struct {
@@ -258,24 +225,12 @@ int main(int argc, char* argv[]) {
     DrawText("3: Performance", 110 + (14 * 20 / 2) + 30, 10, 20, FGCOLOR_TAB);
     if (activeTabNo != 1) {
       AlgoTabs(chartSelection);
-      if (IsKeyDown(KEY_L) && !isPressedL) {
-        chartSelection = (chartSelection + 1) % 4;
-        isPressedL = true;
-      }
-      if (IsKeyUp(KEY_L) && isPressedL) {
-        isPressedL = false;
-      }
-      if (IsKeyDown(KEY_H) && !isPressedH) {
-        chartSelection = chartSelection - 1;
-        if (chartSelection < 0) {
-          chartSelection = 3;
-        }
-        isPressedH = true;
-      }
-      if (IsKeyUp(KEY_H) && isPressedH) {
-        isPressedH = false;
-      }
+      HandleKeyPress(KEY_L, isPressedL,
+                     chartSelection = (chartSelection + 1) % 4);
+      HandleKeyPress(
+          KEY_H, isPressedH, if (--chartSelection < 0) { chartSelection = 3; })
     }
+
     if (activeTabNo == 1) {
       ProcsTab();
     } else if (activeTabNo == 2) {
@@ -298,8 +253,8 @@ int main(int argc, char* argv[]) {
       DrawText(formatTo2(preport.cpuUsage).c_str(), 400, preportY + 30 * i++,
                20, FGCOLOR);
       DrawText("Throughput:", 100, preportY + 30 * i, 20, FGCOLOR);
-      DrawText(formatTo2(preport.throughput).c_str(), 400, preportY + 30 * i++,
-               20, FGCOLOR);
+      DrawText(std::to_string(preport.throughput).c_str(), 400,
+               preportY + 30 * i++, 20, FGCOLOR);
     }
     EndDrawing();
   }
