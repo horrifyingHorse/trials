@@ -1,6 +1,9 @@
 #include <raylib.h>
+#include <cstddef>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include "../include/Scheduler.h"
@@ -72,10 +75,16 @@ void DrawTableBoxes(int x,
   }
 }
 
+std::string formatTo2(double d) {
+  std::ostringstream ss;
+  ss << std::fixed << std::setprecision(2) << d;
+  return ss.str();
+}
+
 void ProcsTab() {
   int balancey = 0;
   DrawText("SchedSim", 100, 80, 60, WHITE);
-  DrawTableBoxes(90, 300, 5, 5, 180, 40);
+  DrawTableBoxes(90, 300, procs.size() + 1, 5, 180, 40);
 
   DrawText("Process Name", 100, 310, 20, FGCOLOR);
   DrawText("Arrival Time", 280, 310, 20, FGCOLOR);
@@ -96,82 +105,110 @@ void ProcsTab() {
   }
 }
 
-void GanttTab() {
-  int w = 1100, h = 600;
-  DrawRectangleLines(100, 100, w, h, FGCOLOR);
-  // DrawLine(150, 120, 1000, 120, FGCOLOR);
-  size_t max = d.getTicks();
-  size_t units = w / max;
-  for (size_t i = 0; i <= units; i++) {
-    DrawText(std::to_string(i * max / units).c_str(), 100 + max * i, 75, 20,
-             FGCOLOR);
-  }
-  int procY = 140;
-  int nameStart = 20;
-  Processes procs = d.getCompletedProcs();
-  for (auto& proc : procs) {
-    double fsize = 20, fadjust = 1;
-    while (proc.procName.size() * (double)((fsize / fadjust) / 2) + nameStart >=
-           100) {
-      fadjust *= 1.2;
-      nameStart = std::max(nameStart - 3, 0);
-    }
-    DrawText(proc.procName.c_str(), nameStart, procY - (fsize / fadjust) / 2,
-             fsize / fadjust, FGCOLOR);
-    DrawLine(100, procY, 100 + w, procY, FGCOLOR);
-    for (auto& burst : proc.burstCPU) {
-      DrawRectangle(100 + burst.first * units, procY - 20,
-                    (burst.second - burst.first) * units, 20, CPUGREEN);
-    }
-    for (auto& burst : proc.burstIO) {
-      DrawRectangle(100 + burst.first * units, procY,
-                    (burst.second - burst.first) * units, 20, IORED);
-    }
-    procY += 60;
-  }
+void AlgoTabs(int selection) {
+  DrawText("sjf", 10, 40, 20, (selection == 0) ? CPUGREEN : FGCOLOR_TAB);
+  DrawText("srtf", 110, 40, 20, (selection == 1) ? CPUGREEN : FGCOLOR_TAB);
+  DrawText("rr", 210, 40, 20, (selection == 2) ? CPUGREEN : FGCOLOR_TAB);
+  DrawText("vrr", 310, 40, 20, (selection == 3) ? CPUGREEN : FGCOLOR_TAB);
 }
 
-void getTab(const int& activeTabNo) {
-  if (activeTabNo == 1) {
-    ProcsTab();
-  } else if (activeTabNo == 2) {
-    GanttTab();
+class GanttChart {
+ public:
+  GanttChart() {}
+  GanttChart(Processes&& procs, size_t ticks) { setProcs(procs, ticks); }
+  void setProcs(Processes& procs, size_t ticks) {
+    this->procs = procs;
+    maxTicks = ticks;
+    units = w / maxTicks;
   }
-}
+  void draw() {
+    size_t chartY = this->chartY;
+    DrawRectangleLines(chartX, chartY, w, h, FGCOLOR);
+    for (size_t i = 0; i <= units; i++) {
+      DrawText(std::to_string(i * maxTicks / units).c_str(),
+               chartX + maxTicks * i, chartY - 25, 20, FGCOLOR);
+    }
+    chartY += 40;
+    for (auto& proc : procs) {
+      double fsize = 20, fadjust = 1;
+      while (proc.procName.size() * (double)((fsize / fadjust) / 2) +
+                 nameStart >=
+             chartX) {
+        fadjust *= 1.2;
+        nameStart = std::max(nameStart - 3, 0);
+      }
+      DrawText(proc.procName.c_str(), nameStart, chartY - (fsize / fadjust) / 2,
+               fsize / fadjust, FGCOLOR);
+      DrawLine(chartX, chartY, chartX + w, chartY, FGCOLOR);
+      for (auto& burst : proc.burstCPU) {
+        DrawRectangle(chartX + burst.first * units, chartY - 20,
+                      (burst.second - burst.first) * units, 20, CPUGREEN);
+      }
+      for (auto& burst : proc.burstIO) {
+        DrawRectangle(chartX + burst.first * units, chartY,
+                      (burst.second - burst.first) * units, 20, IORED);
+      }
+      chartY += 60;
+    }
+  }
+
+  size_t draw_performace() {
+    DrawText("Performance Report:", 5, 80, 20, IORED);
+    int adjustment = 0;
+    DrawTableBoxes(90, chartY - 10, procs.size() + 1, 6, 180, 40);
+    DrawText("Process Name", 100, chartY, 20, FGCOLOR);
+    DrawText("Arrival Time", 280, chartY, 20, FGCOLOR);
+    DrawText("Start Time", 460, chartY, 20, FGCOLOR);
+    DrawText("Comp Time", 640, chartY, 20, FGCOLOR);
+    DrawText("Turnaround Time", 820, chartY, 20, FGCOLOR);
+    DrawText("Waiting Time", 1030, chartY, 20, FGCOLOR);
+    // aT, sT, cT, TAT, WT, Name
+    for (auto& proc : procs) {
+      DrawText(proc.procName.c_str(), 100, 190 + adjustment, 20, FGCOLOR);
+      DrawText(std::to_string(proc.arrivalTime).c_str(), 280, 190 + adjustment,
+               20, FGCOLOR);
+      DrawText(std::to_string(proc.startTime).c_str(), 460, 190 + adjustment,
+               20, FGCOLOR);
+      DrawText(std::to_string(proc.completionTime).c_str(), 640,
+               190 + adjustment, 20, FGCOLOR);
+      DrawText(std::to_string(proc.turnAroundTime()).c_str(), 820,
+               190 + adjustment, 20, FGCOLOR);
+      DrawText(std::to_string(proc.waitingTime()).c_str(), 1030,
+               190 + adjustment, 20, FGCOLOR);
+      adjustment += 40;
+    }
+    return 190 + adjustment + 20;
+  }
+
+ private:
+  Processes procs = {};
+  size_t maxTicks = 1;
+
+  int w = 1100, h = 600;
+  int chartX = 100;
+  int chartY = 150;
+  int nameStart = 20;
+  size_t units = 1100;
+};
 
 int main(int argc, char* argv[]) {
   int h = 800, w = 1300;
   InitWindow(w, h, "SchedSim");
   SetTargetFPS(60);
 
-  Schedulers schedulers;
-  std::vector<std::string> args(argv + 1, argv + argc);
-  for (const auto& arg : args) {
-    if (arg == "sjf") {
-      schedulers.push_back(Scheduler::SJF);
-    } else if (arg == "srtf") {
-      schedulers.push_back(Scheduler::SRTF);
-    } else if (arg == "rr") {
-      schedulers.push_back(Scheduler::RR);
-    } else if (arg == "vrr") {
-      schedulers.push_back(Scheduler::VRR);
-    } else {
-      std::cout << "Invalid Argument: " << arg;
-      return 1;
-    }
-  }
-  if (schedulers.size() == 0) {
-    schedulers.push_back(Scheduler::SJF);
-  }
-
+  Schedulers schedulers = {Scheduler::SJF, Scheduler::SRTF, Scheduler::RR,
+                           Scheduler::VRR};
+  std::vector<GanttChart> charts = {};
+  std::vector<PerformanceReport> preports = {};
   procs = GetProcs();
   for (const auto& scheduler : schedulers) {
     d.init(procs, {.sched = scheduler, .q = 5});
     d.start();
-    d.debug();
+    charts.push_back(GanttChart(d.getCompletedProcs(), d.getTicks()));
+    preports.push_back(d.getPerfReport());
   }
-  std::cout << "Ended\n";
-  bool isPressed = false;
+  int chartSelection = 0;
+  bool isPressedL = false, isPressedH = false;
   struct {
     int x, y, length;
   } activeTab = {.x = 5, .y = 5, .length = 90};
@@ -186,13 +223,9 @@ int main(int argc, char* argv[]) {
     } else if (IsKeyDown(KEY_ONE)) {
       activeTab = {.x = 5, .y = 5, .length = ((20 / 2) * 8) + 10};
       activeTabNo = 1;
-    }
-    if (IsKeyDown(KEY_SPACE) && !isPressed) {
-      isPressed = true;
-    }
-
-    if (IsKeyUp(KEY_SPACE) && isPressed) {
-      isPressed = false;
+    } else if (IsKeyDown(KEY_THREE)) {
+      activeTab = {.x = 275, .y = 5, .length = ((20 / 2) * 14) + 25};
+      activeTabNo = 3;
     }
 
     BeginDrawing();
@@ -202,10 +235,51 @@ int main(int argc, char* argv[]) {
                   BGCOLOR_ACTIVE);
     DrawText("1: Procs", 10, 10, 20, FGCOLOR_TAB);
     DrawText("2: Gantt Chart", 110, 10, 20, FGCOLOR_TAB);
-    getTab(activeTabNo);
-
-    if (0) {
-      DrawText("Press Enter to Restart", 100, 320, 20, FGCOLOR);
+    DrawText("3: Performance", 110 + (14 * 20 / 2) + 30, 10, 20, FGCOLOR_TAB);
+    if (activeTabNo != 1) {
+      AlgoTabs(chartSelection);
+      if (IsKeyDown(KEY_L) && !isPressedL) {
+        chartSelection = (chartSelection + 1) % 4;
+        isPressedL = true;
+      }
+      if (IsKeyUp(KEY_L) && isPressedL) {
+        isPressedL = false;
+      }
+      if (IsKeyDown(KEY_H) && !isPressedH) {
+        chartSelection = chartSelection - 1;
+        if (chartSelection < 0) {
+          chartSelection = 3;
+        }
+        isPressedH = true;
+      }
+      if (IsKeyUp(KEY_H) && isPressedH) {
+        isPressedH = false;
+      }
+    }
+    if (activeTabNo == 1) {
+      ProcsTab();
+    } else if (activeTabNo == 2) {
+      charts[chartSelection].draw();
+    } else if (activeTabNo == 3) {
+      size_t preportY = charts[chartSelection].draw_performace();
+      PerformanceReport preport = preports[chartSelection];
+      int i = 0;
+      DrawText("Total Time Taken: ", 100, preportY + 30 * i, 20, FGCOLOR);
+      DrawText(
+          std::string(std::to_string(preport.totalTicks) + " ticks").c_str(),
+          400, preportY + 30 * i++, 20, FGCOLOR);
+      DrawText("Avg Waiting Time: ", 100, preportY + 30 * i, 20, FGCOLOR);
+      DrawText(formatTo2(preport.avgWaitingTime).c_str(), 400,
+               preportY + 30 * i++, 20, FGCOLOR);
+      DrawText("Avg Turnaround Time:", 100, preportY + 30 * i, 20, FGCOLOR);
+      DrawText(formatTo2(preport.avgTurnAroundTime).c_str(), 400,
+               preportY + 30 * i++, 20, FGCOLOR);
+      DrawText("CPU Usage:", 100, preportY + 30 * i, 20, FGCOLOR);
+      DrawText(formatTo2(preport.cpuUsage).c_str(), 400, preportY + 30 * i++,
+               20, FGCOLOR);
+      DrawText("Throughput:", 100, preportY + 30 * i, 20, FGCOLOR);
+      DrawText(formatTo2(preport.throughput).c_str(), 400, preportY + 30 * i++,
+               20, FGCOLOR);
     }
     EndDrawing();
   }

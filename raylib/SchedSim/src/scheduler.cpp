@@ -129,6 +129,8 @@ void Device::init(Processes& procs, SchedInfo sInfo) {
     this->readyQ = &burstReadyQ;
   } else if (scheduler == Scheduler::SRTF) {
     this->readyQ = &remainReadyQ;
+  } else {
+    this->readyQ = &regularReadyQ;
   }
 }
 
@@ -196,11 +198,22 @@ Processes Device::getCompletedProcs() {
   return completedProcs;
 }
 
+PerformanceReport Device::getPerfReport() {
+  PerformanceReport pr;
+  pr.cpuUsage = usageCPU();
+  pr.throughput = throughput();
+  pr.totalTicks = ticksCPU;
+  pr.avgWaitingTime = avgWaitingTime();
+  pr.avgTurnAroundTime = avgTurnAroundTime();
+  return pr;
+}
+
 void Device::CleanUp() {
   execProc = {};
   completedProcs = {};
   q = 0;
   ticksCPU = 0;
+  ticksCPUIdle = 0;
   isCPUIdle = true;
 
   countIOBurst = 0;

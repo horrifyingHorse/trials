@@ -110,6 +110,14 @@ class BurstPriorityQ : public IQueue {
   std::priority_queue<Process, Processes, decltype(cmp)> q;
 };
 
+typedef struct Performance {
+  double avgWaitingTime = 0;
+  double avgTurnAroundTime = 0;
+  double cpuUsage = 0;
+  double throughput = 0;
+  size_t totalTicks = 0;
+} PerformanceReport;
+
 class Device {
  public:
   typedef struct SchedInfo {
@@ -129,6 +137,7 @@ class Device {
   double throughput();
   size_t getTicks();
   Processes getCompletedProcs();
+  PerformanceReport getPerfReport();
 
  private:
   Process execProc = {};
