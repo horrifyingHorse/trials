@@ -123,7 +123,9 @@ class GanttChart {
   }
   void draw() {
     size_t chartY = this->chartY;
-    DrawRectangleLines(chartX, chartY, w, h, FGCOLOR);
+    DrawLine(chartX, chartY, chartX + w, chartY, FGCOLOR);
+    DrawLine(chartX, chartY, chartX, chartY + 40 + procs.size() * 60, FGCOLOR);
+    // DrawRectangleLines(chartX, chartY, w, h, FGCOLOR);
     for (size_t i = 0; i <= units; i++) {
       DrawText(std::to_string(i * maxTicks / units).c_str(),
                chartX + maxTicks * i, chartY - 25, 20, FGCOLOR);
@@ -140,13 +142,38 @@ class GanttChart {
       DrawText(proc.procName.c_str(), nameStart, chartY - (fsize / fadjust) / 2,
                fsize / fadjust, FGCOLOR);
       DrawLine(chartX, chartY, chartX + w, chartY, FGCOLOR);
+      Vector2 mousePos = GetMousePosition();
       for (auto& burst : proc.burstCPU) {
-        DrawRectangle(chartX + burst.first * units, chartY - 20,
-                      (burst.second - burst.first) * units, 20, CPUGREEN);
+        int x = chartX + burst.first * units;
+        int y = chartY - 20;
+        int len = (burst.second - burst.first) * units;
+        int h = 20;
+        Rectangle r = {(float)x, (float)y, (float)len, (float)h};
+        Color color = CPUGREEN;
+        if (CheckCollisionPointRec(mousePos, r)) {
+          DrawText(std::string(std::to_string(burst.first) + "-" +
+                               std::to_string(burst.second))
+                       .c_str(),
+                   x, y - 25, 20, FGCOLOR);
+          color = SKYBLUE;
+        }
+        DrawRectangleRec(r, color);
       }
       for (auto& burst : proc.burstIO) {
-        DrawRectangle(chartX + burst.first * units, chartY,
-                      (burst.second - burst.first) * units, 20, IORED);
+        int x = chartX + burst.first * units;
+        int y = chartY;
+        int len = (burst.second - burst.first) * units;
+        int h = 20;
+        Rectangle r = {(float)x, (float)y, (float)len, (float)h};
+        Color color = IORED;
+        if (CheckCollisionPointRec(mousePos, r)) {
+          DrawText(std::string(std::to_string(burst.first) + "-" +
+                               std::to_string(burst.second))
+                       .c_str(),
+                   x, y - 25, 20, FGCOLOR);
+          color = SKYBLUE;
+        }
+        DrawRectangleRec(r, color);
       }
       chartY += 60;
     }
