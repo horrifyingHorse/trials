@@ -125,11 +125,14 @@ class GanttChart {
     size_t chartY = this->chartY;
     DrawLine(chartX, chartY, chartX + w, chartY, FGCOLOR);
     DrawLine(chartX, chartY, chartX, chartY + 40 + procs.size() * 60, FGCOLOR);
-    // DrawRectangleLines(chartX, chartY, w, h, FGCOLOR);
     for (size_t i = 0; i <= units; i++) {
       DrawText(std::to_string(i * maxTicks / units).c_str(),
                chartX + maxTicks * i, chartY - 25, 20, FGCOLOR);
     }
+    DrawRectangle(w - chartX - 100, chartY / 3, 30, 20, CPUGREEN);
+    DrawText("CPU Burst", w - chartX - 100 + 35, chartY / 3, 20, CPUGREEN);
+    DrawRectangle(w - chartX + 100, chartY / 3, 30, 20, IORED);
+    DrawText("IO Burst", w - chartX + 135, chartY / 3, 20, IORED);
     chartY += 40;
     for (auto& proc : procs) {
       double fsize = 20, fadjust = 1;
@@ -142,39 +145,8 @@ class GanttChart {
       DrawText(proc.procName.c_str(), nameStart, chartY - (fsize / fadjust) / 2,
                fsize / fadjust, FGCOLOR);
       DrawLine(chartX, chartY, chartX + w, chartY, FGCOLOR);
-      Vector2 mousePos = GetMousePosition();
-      for (auto& burst : proc.burstCPU) {
-        int x = chartX + burst.first * units;
-        int y = chartY - 20;
-        int len = (burst.second - burst.first) * units;
-        int h = 20;
-        Rectangle r = {(float)x, (float)y, (float)len, (float)h};
-        Color color = CPUGREEN;
-        if (CheckCollisionPointRec(mousePos, r)) {
-          DrawText(std::string(std::to_string(burst.first) + "-" +
-                               std::to_string(burst.second))
-                       .c_str(),
-                   x, y - 25, 20, FGCOLOR);
-          color = SKYBLUE;
-        }
-        DrawRectangleRec(r, color);
-      }
-      for (auto& burst : proc.burstIO) {
-        int x = chartX + burst.first * units;
-        int y = chartY;
-        int len = (burst.second - burst.first) * units;
-        int h = 20;
-        Rectangle r = {(float)x, (float)y, (float)len, (float)h};
-        Color color = IORED;
-        if (CheckCollisionPointRec(mousePos, r)) {
-          DrawText(std::string(std::to_string(burst.first) + "-" +
-                               std::to_string(burst.second))
-                       .c_str(),
-                   x, y - 25, 20, FGCOLOR);
-          color = SKYBLUE;
-        }
-        DrawRectangleRec(r, color);
-      }
+      DrawChart(proc.burstCPU, chartY, chartY - 20, CPUGREEN);
+      DrawChart(proc.burstIO, chartY, chartY, IORED);
       chartY += 60;
     }
   }
@@ -189,7 +161,6 @@ class GanttChart {
     DrawText("Comp Time", 640, chartY, 20, FGCOLOR);
     DrawText("Turnaround Time", 820, chartY, 20, FGCOLOR);
     DrawText("Waiting Time", 1030, chartY, 20, FGCOLOR);
-    // aT, sT, cT, TAT, WT, Name
     for (auto& proc : procs) {
       DrawText(proc.procName.c_str(), 100, 190 + adjustment, 20, FGCOLOR);
       DrawText(std::to_string(proc.arrivalTime).c_str(), 280, 190 + adjustment,
@@ -216,6 +187,28 @@ class GanttChart {
   int chartY = 150;
   int nameStart = 20;
   size_t units = 1100;
+
+  void DrawChart(std::vector<std::pair<size_t, size_t>> bursts,
+                 size_t chartY,
+                 size_t y,
+                 Color clr) {
+    Vector2 mousePos = GetMousePosition();
+    for (auto& burst : bursts) {
+      int x = chartX + burst.first * units;
+      int len = (burst.second - burst.first) * units;
+      int h = 20;
+      Rectangle r = {(float)x, (float)y, (float)len, (float)h};
+      Color color = clr;
+      if (CheckCollisionPointRec(mousePos, r)) {
+        DrawText(std::string(std::to_string(burst.first) + "-" +
+                             std::to_string(burst.second))
+                     .c_str(),
+                 x, y - 25, 20, FGCOLOR);
+        color = SKYBLUE;
+      }
+      DrawRectangleRec(r, color);
+    }
+  }
 };
 
 int main(int argc, char* argv[]) {
