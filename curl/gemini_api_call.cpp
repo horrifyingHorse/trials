@@ -26,9 +26,10 @@ const string DEFAULT = "\033[0m";
 const string CURSOR_BEGIN = "\r";
 const string BOLD = "\033[1m";
 
-const string GRAY_FG = "\033[90m";
+const string PROMPT_FG = "\033[90m";
 const string RED_FG = "\033[31m";
-const string BABBF1 = "\033[38;2;186;187;241m";
+const string BRIGHT_GREEN_FG = "\033[92m";
+const string RESPONSE_FG = "\033[38;2;186;187;241m";
 
 const string MOVE1UP = "\033[1A";
 const string MOVETOP = "\033[H";
@@ -67,6 +68,7 @@ void waiting();
 void initCurl(ENV&, CURL*, struct curl_slist*);
 void clean(string&);
 void peek_history(GeminiResponseParser&);
+void save_context(GeminiResponseParser&, string);
 
 atomic<bool> displayWait = true;
 
@@ -91,8 +93,8 @@ int main() {
     string readBuffer;
 
     cout << ANSI::DEFAULT;
-    cout << ANSI::GRAY_FG << ANSI::BOLD << "\n > " << ANSI::DEFAULT
-         << ANSI::GRAY_FG;
+    cout << ANSI::PROMPT_FG << ANSI::BOLD << "\n > " << ANSI::DEFAULT
+         << ANSI::PROMPT_FG;
     getline(cin, prompt);
     clean(prompt);
 
@@ -111,6 +113,10 @@ int main() {
       cout << ANSI::DEFAULT << flush;
       return 0;
     }
+    if (prompt.substr(0, 5) == "/save") {
+      save_context(gemini, prompt.substr(6));
+      continue;
+    }
 
     gemini.push(Gemini::USER, prompt);
 
@@ -126,7 +132,7 @@ int main() {
     displayWait = false;
     wait.join();
 
-    cout << ANSI::DEFAULT << ANSI::BABBF1 << ANSI::BOLD;
+    cout << ANSI::DEFAULT << ANSI::RESPONSE_FG << ANSI::BOLD;
     cout << readBuffer << endl;
   }
   curl_easy_cleanup(curl);
@@ -261,7 +267,7 @@ void waiting() {
       bffr << "\n";
     }
 
-    cout << ANSI::BABBF1 << ANSI::CURSOR_BEGIN << bffr.str() << flush;
+    cout << ANSI::RESPONSE_FG << ANSI::CURSOR_BEGIN << bffr.str() << flush;
     this_thread::sleep_for(chrono::milliseconds(100));
     cout << ANSI::MOVE1UP << ANSI::CLEAR_LINE << ANSI::MOVE1UP
          << ANSI::CLEAR_LINE << ANSI::MOVE1UP << ANSI::CLEAR_LINE << flush;
@@ -278,9 +284,9 @@ void initCurl(ENV& env, CURL* curl, struct curl_slist* headers) {
   const string GEMINI_URL =
       "https://generativelanguage.googleapis.com/v1beta/models/"
       "gemini-1.5-flash:generateContent?key=" +
-      env["LEAKED_API_KEY"];
+      env["GEMINI_KEY"];
 
-  cout << ANSI::BABBF1 << GEMINI_URL << "\n";
+  cout << ANSI::RESPONSE_FG << GEMINI_URL << "\n";
   curl_easy_setopt(curl, CURLOPT_POST, 1L);
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
   curl_easy_setopt(curl, CURLOPT_URL, GEMINI_URL.c_str());
@@ -314,4 +320,17 @@ void peek_history(GeminiResponseParser& gemini) {
     execl("/bin/bash", "bash", "ge_run_history.sh", NULL);
   }
   wait(NULL);
+}
+
+void save_context(GeminiResponseParser& gemini, string fname) {
+  fstream f(fname + ".json", ios::out | ios::trunc);
+  if (!f) {
+    perror("Unable to save context: ");
+    f.close();
+    return;
+  }
+  f << gemini.str();
+  f.close();
+  cout << ANSI::BRIGHT_GREEN_FG << "Context saved to `" << fname << ".json`\n"
+       << ANSI::DEFAULT;
 }
