@@ -25,6 +25,8 @@ type CmdMetaData struct {
 	cmdType CmdType
 	cmd     *exec.Cmd
 	r, w    *os.File
+	state   bool
+	cd      bool
 }
 
 type Shell struct {
@@ -96,6 +98,17 @@ func main() {
 		shell.cmds = Parse(tokens)
 
 		for _, execCmd := range shell.cmds {
+			if execCmd.cd {
+				if len(execCmd.cmd.Args) > 2 {
+					fmt.Println("Too many arguments for cd:", execCmd.cmd.Args)
+					break
+				} else {
+					if err := os.Chdir(execCmd.cmd.Args[1]); err != nil {
+						fmt.Println(err.Error())
+						break
+					}
+				}
+			}
 			if execCmd.cmdType == PIPE {
 				execCmd.cmd.Stdin = shell.r
 				execCmd.r = shell.r
@@ -116,14 +129,25 @@ func main() {
 				execCmd.cmd.Stdout = shell.w
 				execCmd.w = shell.w
 			}
+			if execCmd.cd == true {
+				execCmd.state = false
+				continue
+			}
 			if err := execCmd.cmd.Start(); err != nil {
 				fmt.Println(err.Error())
+				execCmd.state = false
+			} else {
+				execCmd.state = true
 			}
 		}
 		for i, cmd := range shell.cmds {
-			if err := cmd.cmd.Wait(); err != nil {
-				fmt.Println(err.Error())
-				return
+			if cmd.state {
+				if err := cmd.cmd.Wait(); err != nil {
+					fmt.Println(err.Error())
+					return
+				}
+			} else if !cmd.cd {
+				continue
 			}
 			if i > 0 && shell.cmds[i-1].cmdType == PIPE {
 				cmd.r.Close()
@@ -208,6 +232,9 @@ func Parse(tokens []string) []*CmdMetaData {
 			// 	os.Exit(1)
 			// }
 			// cmd.Stdout = w
+			if tokens[begin] == "cd" {
+				cmd.cd = true
+			}
 
 			cmds = append(cmds, cmd)
 			begin = i + 1
@@ -219,6 +246,9 @@ func Parse(tokens []string) []*CmdMetaData {
 	cmd.cmdType = BASE
 	// cmd.Stdin = r
 	// cmd.Stdout = os.Stdout
+	if tokens[begin] == "cd" {
+		cmd.cd = true
+	}
 	cmds = append(cmds, cmd)
 
 	return cmds
