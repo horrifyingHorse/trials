@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+
 	// "reflect"
 
 	// "log"
@@ -12,6 +13,25 @@ import (
 	"slices"
 	"strings"
 )
+
+type CmdType int
+
+const (
+	BASE CmdType = iota
+	PIPE
+)
+
+type CmdMetaData struct {
+	cmdType CmdType
+	cmd     *exec.Cmd
+	r, w    *os.File
+}
+
+type Shell struct {
+	r, w *os.File
+	err  error
+	cmds []*CmdMetaData
+}
 
 func main() {
 	// ENV := make(map[string]string)
@@ -35,6 +55,7 @@ func main() {
 		}
 		fmt.Print(cwd + "> ")
 		if !scanner.Scan() {
+			fmt.Println("Failed to scan")
 			break
 		}
 
@@ -47,7 +68,8 @@ func main() {
 		// We need to Tokenize -> Expand Env
 		line := scanner.Text()
 		line = strings.Trim(line, " \t")
-		fmt.Println(Tokenize(&line), len(Tokenize(&line)))
+		tokens := Tokenize(&line)
+		fmt.Println(tokens, len(tokens))
 		if line == "exit" {
 			break
 		}
@@ -55,35 +77,62 @@ func main() {
 		// ls|wc
 		// echo "ls|wc"
 
-		arr := strings.Split(line, " ")
-
-		if arr[0] == "cd" {
-			if len(arr) > 2 {
-				fmt.Println("Too many arguments for cd")
-			} else {
-				if err := os.Chdir(arr[1]); err != nil {
-					fmt.Println(err.Error())
-				}
-			}
-			continue
-		}
+		// arr := strings.Split(line, " ")
+		// if arr[0] == "cd" {
+		// 	if len(arr) > 2 {
+		// 		fmt.Println("Too many arguments for cd")
+		// 	} else {
+		// 		if err := os.Chdir(arr[1]); err != nil {
+		// 			fmt.Println(err.Error())
+		// 		}
+		// 	}
+		// 	continue
+		// }
 
 		// Explicitly Handle: | < > 2> 1> 2>&1 & && ~ $?
-		cmd := exec.Command(arr[0], arr[1:]...)
-		cmd.Stdout = os.Stdout
-		cmd.Stdin = os.Stdin
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			fmt.Println(err.Error())
+		shell := new(Shell)
+		shell.r = os.Stdin
+		shell.w = os.Stdout
+		shell.cmds = Parse(tokens)
+
+		for _, execCmd := range shell.cmds {
+			if execCmd.cmdType == PIPE {
+				execCmd.cmd.Stdin = shell.r
+				execCmd.r = shell.r
+				shell.r, shell.w, shell.err = os.Pipe()
+				if shell.err != nil {
+					fmt.Println(err.Error())
+					os.Exit(1)
+				}
+				execCmd.cmd.Stdout = shell.w
+				execCmd.w = shell.w
+			} else {
+				execCmd.cmd.Stdin = shell.r
+				execCmd.r = shell.r
+				if shell.w != os.Stdout {
+					shell.r = os.Stdin
+					shell.w = os.Stdout
+				}
+				execCmd.cmd.Stdout = shell.w
+				execCmd.w = shell.w
+			}
+			if err := execCmd.cmd.Start(); err != nil {
+				fmt.Println(err.Error())
+			}
+		}
+		for i, cmd := range shell.cmds {
+			if err := cmd.cmd.Wait(); err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+			if i > 0 && shell.cmds[i-1].cmdType == PIPE {
+				cmd.r.Close()
+			}
+			if cmd.cmdType == PIPE {
+				cmd.w.Close()
+			}
 		}
 
-		// or
-		//
-		// if resp, err := cmd.CombinedOutput(); err != nil {
-		// 	log.Fatal(err)
-		// } else {
-		// 	fmt.Printf("%s", resp)
-		// }
 	}
 }
 
@@ -133,4 +182,44 @@ func Tokenize(s *string) []string {
 	}
 
 	return tokens
+}
+
+func Parse(tokens []string) []*CmdMetaData {
+	var cmds []*CmdMetaData
+	var cmd *CmdMetaData
+	var execCmd *exec.Cmd
+	// var r, w *os.File
+	// var err error
+
+	begin := 0
+	// r = os.Stdin
+	// w = os.Stdout
+	for i, t := range tokens {
+		if t == "|" {
+			execCmd = exec.Command(tokens[begin], tokens[begin+1:i]...)
+
+			cmd = new(CmdMetaData)
+			cmd.cmdType = PIPE
+			cmd.cmd = execCmd
+			// cmd.Stdin = r
+			// r, w, err = os.Pipe()
+			// if err != nil {
+			// 	fmt.Println(err.Error())
+			// 	os.Exit(1)
+			// }
+			// cmd.Stdout = w
+
+			cmds = append(cmds, cmd)
+			begin = i + 1
+		}
+	}
+	execCmd = exec.Command(tokens[begin], tokens[begin+1:]...)
+	cmd = new(CmdMetaData)
+	cmd.cmd = execCmd
+	cmd.cmdType = BASE
+	// cmd.Stdin = r
+	// cmd.Stdout = os.Stdout
+	cmds = append(cmds, cmd)
+
+	return cmds
 }
